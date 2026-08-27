@@ -1,0 +1,10 @@
+%dw 2.0
+
+type auto_6ba665eb_29d5_4b79_aa10_d8e5b70df06d_Output_Variables_processedRecords = Array<org_mule_runtime_api_message_Message {"typeId": "org.mule.runtime.api.message.Message"}>
+type org_mule_runtime_api_message_Message = {|
+  payload: Any, 
+  attributes: Null
+|} {"typeId": "org.mule.runtime.api.message.Message"}
+
+
+

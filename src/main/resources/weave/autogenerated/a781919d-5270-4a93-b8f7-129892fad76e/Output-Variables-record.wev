@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_a781919d_5270_4a93_b8f7_129892fad76e_Output_Variables_record = Any
+

@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+	<munit:config name="sales-digest-test-suite.xml" />
+
+	<munit:test name="implementationFlow-happy-path-test"
+		description="Builds the EUR digest, verifies aggregation and confirms repeated reference lookups are cached.">
+		<munit:behavior>
+			<munit-tools:mock-when processor="file:read">
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[readUrl('classpath://test-data/sales-happy.csv', 'application/octet-stream')]" mediaType="application/csv" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<munit-tools:mock-when processor="http:request">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref" whereValue="#['RestCountries_HTTP_Request_configuration']" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[readUrl('classpath://test-data/rest-countries-happy.json', 'application/octet-stream')]" mediaType="application/json" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<munit-tools:mock-when processor="http:request">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref" whereValue="#['Frankfurter_HTTP_Request_configuration']" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[readUrl('classpath://test-data/frankfurter-gbp-eur.json', 'application/octet-stream')]" mediaType="application/json" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<munit-tools:mock-when processor="http:request">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref" whereValue="#['Treasury_HTTP_Request_configuration']" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[readUrl('classpath://test-data/treasury-accepted.json', 'application/octet-stream')]" mediaType="application/json" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<munit-tools:spy processor="mule:flow-ref">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="name" whereValue="#['post-processed-data']" />
+				</munit-tools:with-attributes>
+				<munit-tools:before-call>
+					<set-variable variableName="digestUnderTest" value="#[output application/java --- payload]" />
+					<munit-tools:assert-that expression="#[vars.digestUnderTest.total_sales_count as Number]" is="#[MunitTools::equalTo(3)]" message="The digest must contain all three valid sales." />
+					<munit-tools:assert-that expression="#[vars.digestUnderTest.total_amount_eur as Number]" is="#[MunitTools::equalTo(190)]" message="EUR passthrough plus the two GBP conversions must total 190 EUR." />
+					<munit-tools:assert-that expression="#[vars.digestUnderTest.period_start as String]" is="#[MunitTools::equalTo('2026-01-01')]" />
+					<munit-tools:assert-that expression="#[vars.digestUnderTest.period_end as String]" is="#[MunitTools::equalTo('2026-01-03')]" />
+					<munit-tools:assert-that expression="#[vars.digestUnderTest.generated_at]" is="#[MunitTools::notNullValue()]" />
+					<munit-tools:assert-that expression="#[((vars.digestUnderTest.by_country filter $.country_code == 'GB')[0].country_name) as String]" is="#[MunitTools::equalTo('United Kingdom')]" />
+					<munit-tools:assert-that expression="#[((vars.digestUnderTest.by_country filter $.country_code == 'GB')[0].sales_count) as Number]" is="#[MunitTools::equalTo(2)]" />
+					<munit-tools:assert-that expression="#[((vars.digestUnderTest.by_country filter $.country_code == 'GB')[0].amount_eur) as Number]" is="#[MunitTools::equalTo(90)]" />
+					<munit-tools:assert-that expression="#[((vars.digestUnderTest.by_currency filter $.currency == 'GBP')[0].fx_rate) as Number]" is="#[MunitTools::equalTo(1.2)]" />
+					<munit-tools:assert-that expression="#[((vars.digestUnderTest.by_currency filter $.currency == 'GBP')[0].amount_eur) as Number]" is="#[MunitTools::equalTo(90)]" />
+				</munit-tools:before-call>
+			</munit-tools:spy>
+		</munit:behavior>
+
+		<munit:execution>
+			<flow-ref name="implementationFlow" />
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:verify-call processor="http:request" times="2">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref" whereValue="#['RestCountries_HTTP_Request_configuration']" />
+				</munit-tools:with-attributes>
+			</munit-tools:verify-call>
+			<munit-tools:verify-call processor="http:request" times="1">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref" whereValue="#['Frankfurter_HTTP_Request_configuration']" />
+				</munit-tools:with-attributes>
+			</munit-tools:verify-call>
+			<munit-tools:verify-call processor="http:request" times="1">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref" whereValue="#['Treasury_HTTP_Request_configuration']" />
+				</munit-tools:with-attributes>
+			</munit-tools:verify-call>
+		</munit:validation>
+	</munit:test>
+
+	<munit:test name="implementationFlow-fx-error-prevents-publish-test"
+		description="Propagates a Frankfurter server failure and proves that no digest is published.">
+		<munit:behavior>
+			<munit-tools:mock-when processor="file:read">
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[readUrl('classpath://test-data/sales-fx-error.csv', 'application/octet-stream')]" mediaType="application/csv" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<munit-tools:mock-when processor="http:request">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref" whereValue="#['RestCountries_HTTP_Request_configuration']" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:payload value="#[readUrl('classpath://test-data/rest-countries-error.json', 'application/octet-stream')]" mediaType="application/json" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<!-- Mock the FX integration boundary after its retry policy has been exhausted. -->
+			<munit-tools:mock-when processor="mule:flow-ref">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="name" whereValue="#['frankfurter-generic-request']" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:error typeId="HTTP:INTERNAL_SERVER_ERROR" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<try>
+				<flow-ref name="implementationFlow" />
+				<error-handler>
+					<on-error-continue type="ANY">
+						<set-variable variableName="capturedErrorType" value="#[error.errorType.namespace ++ ':' ++ error.errorType.identifier]" doc:name="capturedErrorType"/>
+					</on-error-continue>
+				</error-handler>
+			</try>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that expression="#[vars.capturedErrorType]" is="#[MunitTools::notNullValue()]" message="The upstream FX failure must propagate to the scheduler flow." />
+			<munit-tools:verify-call processor="http:request" times="0">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref" whereValue="#['Treasury_HTTP_Request_configuration']" />
+				</munit-tools:with-attributes>
+			</munit-tools:verify-call>
+		</munit:validation>
+	</munit:test>
+
+</mule>

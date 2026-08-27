@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<file:config name="File_Config" doc:name="File Config" doc:id="125ff2b2-bf28-48cd-802f-18c747f7a21e" />
+	<flow name="implementationFlow" doc:id="09f0ce45-661a-4e5b-bf39-175f438675d7" >
+		<scheduler doc:name="Scheduler" doc:id="0395d4a2-1c92-4bed-b3ce-0283b9985b6f" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="1" timeUnit="HOURS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<logger level="INFO" doc:name="Start" doc:id="c5f590b8-d9fc-46f0-85ba-efac8d088b0b" message='#["CORRELATION ID [" ++ correlationId ++ "] - Started synchronizing sales batch process. Extracting CSV..."]'/>
+		<file:read doc:name="Read" doc:id="6727f51f-6e56-44d5-aa52-e959c4131cd4" config-ref="File_Config" path="${salesFilepath}"/>
+		<ee:transform doc:name="Transform CSV to JSON" doc:id="0c74a192-5b14-463b-a72c-5178b3dd7eea" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map $]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="CSV extracted" doc:id="6310cb3e-62b5-42ad-a73b-0819d810ba7a" message='#[output text --- "CORRELATION ID [" ++ correlationId ++ "] - File successfully extracted. Records count: [" ++ sizeOf(payload) ++ "]."]'/>
+		<parallel-foreach doc:name="Parallel For Each" doc:id="6a6446d4-70f7-400e-88ee-c18aecc12d0f" collection="#[payload]" maxConcurrency="5" target="processedRecords">
+			<logger level="INFO" doc:name="Start processing record" doc:id="2ae0d63c-943b-467d-ad79-3c915b0a5a53" message='#["RECORD ID [" ++ payload.sale_id ++ "] - Starting processing of the record."]' />
+			<set-variable value="#[output application/json --- payload]" doc:name="record" doc:id="a190e785-8bd4-4f2c-9e50-5ff096ee0bd0" variableName="record" />
+			<flow-ref doc:name="get-country-data" doc:id="d081c15d-d246-4751-ac42-2fdd9b121511" name="get-country-data" target="countryData"/>
+			<flow-ref doc:name="get-currencies-rate" doc:id="19b0b3cf-d200-4c72-a7c7-4710d43a2c18" name="get-currencies-rate" target="currenciesData"/>
+			<ee:transform doc:name="Set enriched record" doc:id="159781eb-4e62-459a-ad07-aa1bc251fd16" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+vars.record ++ vars.countryData ++ vars.currenciesData]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<logger level="INFO" doc:name="Record is processed" doc:id="90f03ffc-34e0-4692-8ffd-7f313cab58fb" message='#["RECORD ID [" ++ vars.record.sale_id ++ "] - Record is processed."]'/>
+		</parallel-foreach>
+		<ee:transform doc:name="Aggregation" doc:id="07f796f2-206e-4f8e-a4ab-dd13faccce22" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+var result =  vars.processedRecords map $.payload
+var dates = result filter !isEmpty($.sale_date) map $.sale_date as Date
+var euro_amounts = (result filter !isEmpty($.amount_eur)).amount_eur
+---
+{
+    generated_at: now() >> "UTC",
+    period_start: min(dates),
+    period_end: max(dates),
+    total_sales_count: sizeOf(result),
+    total_amount_eur: sum(euro_amounts),
+    by_country: result groupBy $.country_code pluck ((value, key, index) -> {
+        country_code: key,
+        region: value.region[0],
+        country_name: value.country_name[0],
+        sales_count: sizeOf(value),
+        amount_eur: sum( (value.amount_eur filter((item) -> !isEmpty(item))) ),
+    }),
+    by_currency: result groupBy $.currency pluck ((value, key, index) -> {
+        currency: key,
+        sales_count: sizeOf(value),
+        fx_rate: value.fx_rate[0],
+        amount_eur: sum( (value.amount_eur filter((item) -> !isEmpty(item))) ),
+    }),
+    data: result
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Data is processed" doc:id="fade0225-bf82-481a-8809-592559c65329" message='#["CORRELATION ID [" ++ correlationId ++ "] - Data is processed. Sending batch to the treasury destination..."]'/>
+		<flow-ref doc:name="post-processed-data" doc:id="a4b9aff5-0545-46fd-917b-99a83a935d6b" name="post-processed-data"/>
+		<logger level="INFO" doc:name="DEBUG" doc:id="4d613327-d03b-43ee-9788-9e06fc7c2665" message="#[payload]"/>
+		<logger level="INFO" doc:name="End" doc:id="faf359dc-a366-4d95-9b0f-a4a56ab1cb67" message='#["CORRELATION ID [" ++ correlationId ++ "] - The process is finished."]' />
+		<error-handler ref="error-handling.global-error-handler" />
+	</flow>
+	<sub-flow name="get-country-data" doc:id="b7cd0a43-224c-4f06-bbd5-1ef6d8a88d8a" >
+		<logger level="INFO" doc:name="Start" doc:id="8294ead6-7011-4318-9a2a-20b7a3ece3c4" message='#["RECORD ID [" ++ vars.record.sale_id ++ "] - Extracting country data for the record."]'/>
+		<ee:transform doc:name="Set request" doc:id="fbab6ab1-c779-489a-b0de-bf83ccd01ef4" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="request" ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	method: "GET",
+	path: "/countries/v5/code",
+	queryParams: {
+		q: vars.record.country_code
+	}
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<ee:cache doc:name="Cache country response" cachingStrategy-ref="Country_Response_Caching_Strategy">
+			<flow-ref doc:name="rest-countries-generic-request" doc:id="eb0205e8-b588-4cbb-b0a9-0a28be69dce8" name="rest-countries-generic-request"/>
+		</ee:cache>
+		<ee:transform doc:name="Set required data" doc:id="777bf2ad-884b-4d99-8f98-83fb95b0c4da" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+var country = (payload.data.objects filter $.codes.alpha_2 == vars.record.country_code)[0] default {}
+---
+{
+    country_name: country.names.common,
+    region: country.region
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="End" doc:id="fe88e389-4973-4a58-8a31-8515b9cd845a" message='#["RECORD ID [" ++ vars.record.sale_id ++ "] - Country data for the record with country code [" ++ vars.record.country_code ++"] is extracted and processed."]'/>
+	</sub-flow>
+	<sub-flow name="get-currencies-rate" doc:id="a781919d-5270-4a93-b8f7-129892fad76e" >
+		<logger level="INFO" doc:name="Start" doc:id="b33686c6-c30e-43a3-a6f1-a6704a615d43" message='#["RECORD ID [" ++ vars.record.sale_id ++ "] - Extracting currency data for the record for currency [" ++ vars.record.currency default "" ++ "]."]' />
+		<choice doc:name="Is record currency reference?" doc:id="3f1cf575-ceab-4b79-a029-e4e49cf45a5d" >
+			<when expression='#[vars.record.currency == Mule::p("referenceCurrency")]'>
+				<logger level="INFO" doc:name="Record currency is the same" doc:id="2ddd6fc0-0a78-48be-aa6f-0d41a6e50f31" message="#[&quot;RECORD ID [&quot; ++ vars.record.sale_id ++ &quot;] - The record\'s currency is identical to the reference currency. Rate and EUR amount are set to default values.&quot;]"/>
+				<ee:transform doc:name="Set default required data" doc:id="f76a53fe-cb93-4726-9c75-a245db03c7dc" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    fx_rate: 1.0,
+    amount_eur: vars.record.amount_local as Number
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+			<when expression="#[isEmpty(vars.record.currency)]">
+				<logger level="INFO" doc:name="Record currency is empty" doc:id="2478fa30-7829-4f4c-b450-0546fc08211f" message="#[&quot;RECORD ID [&quot; ++ vars.record.sale_id ++ &quot;] - The record\'s currency is empty. Rate and EUR amount are set to null values.&quot;]" />
+				<ee:transform doc:name="Set required data" doc:id="67a91563-b5eb-4482-b0d9-ba85c651be1a" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    fx_rate: null,
+    amount_eur: null
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Send request to currency service" doc:id="91f0ec29-79d7-46ed-a2ae-8c7c3c2a8886" message='#["RECORD ID [" ++ vars.record.sale_id ++ "] - Sending request to collect currency rate..."]'/>
+				<ee:transform doc:name="Set request" doc:id="5ca8c8f5-9173-4fdf-83dc-95df158b0f29">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="request"><![CDATA[%dw 2.0
+output application/json
+---
+{
+	method: "GET",
+	path: "/rates",
+	queryParams: {
+		base: vars.record.currency,
+		quotes: Mule::p("referenceCurrency")
+	}
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+				<ee:cache doc:name="Cache currency response" cachingStrategy-ref="Currency_Response_Caching_Strategy">
+					<flow-ref doc:name="frankfurter-generic-request" doc:id="7c57c766-aa8a-4f50-a6e8-0d1aaf93a627" name="frankfurter-generic-request" />
+				</ee:cache>
+				<ee:transform doc:name="Set required data" doc:id="da649383-06af-494b-ab8e-34319e980024">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+
+var rate = payload[0]
+
+---
+{
+    fx_rate: rate.rate,
+    amount_eur: if(!isEmpty(rate.rate)) vars.record.amount_local as Number * rate.rate else null
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+			</otherwise>
+		</choice>
+		<logger level="INFO" doc:name="End" doc:id="8541e082-e6cc-4595-a4a5-64cf6929a08f" message='#["RECORD ID [" ++ vars.record.sale_id ++ "] - Currency data for the record is extracted."]' />
+	</sub-flow>
+	<sub-flow name="post-processed-data" doc:id="6ba665eb-29d5-4b79-aa10-d8e5b70df06d" >
+		<ee:transform doc:name="Set request" doc:id="801c7841-55e9-4be4-9392-e74867ec9b9d" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="request" ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	method: "POST",
+	path: "/post",
+	body: payload
+	
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="treasury-generic-request" doc:id="7199e9d8-8e1f-4967-a41e-cfc2b2ea5208" name="treasury-generic-request"/>
+	</sub-flow>
+</mule>

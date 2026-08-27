@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	<sub-flow name="util-treasury.manage-error" doc:id="471de496-81d4-49cb-b09f-8df5d68a099a" >
+		<choice doc:name="Error type is set?" doc:id="b69e0b47-3cb0-4918-9e43-912fc7881291" >
+			<when expression='#["BAD_REQUEST" == vars.errorType]' >
+				<set-variable value="#[400]" doc:name="httpStatus" doc:id="92a5819e-d2f2-486c-88ac-bfe196962196" variableName="httpStatus"/>
+				<set-variable value="#[vars.errorDescription]" doc:name="errorTitle" doc:id="b53717b6-a5c8-413a-8c91-2b75456dd88d" variableName="errorTitle" />
+				<raise-error doc:name="TREASURY:BAD_REQUEST" doc:id="3e5d6a52-5d4a-4a80-8c2e-73d87f061f2e" type="TREASURY:BAD_REQUEST" description="#[vars.errorDescription]" />
+			</when>
+			<when expression='#["NOT_FOUND" == vars.errorType]' >
+				<set-variable value="#[404]" doc:name="httpStatus" doc:id="d80aa485-ef11-46d7-8789-06fdefdc853d" variableName="httpStatus" />
+				<set-variable value="#['Resource not found']" doc:name="errorTitle" doc:id="f3f7d462-61b1-48aa-89c7-5d95b1534aea" variableName="errorTitle" />
+				<raise-error doc:name="TREASURY:NOT_FOUND" doc:id="69f6a912-dfc9-4608-924b-9dca51dcf91e" type="TREASURY:NOT_FOUND" description="#[vars.errorDescription]" />
+			</when>
+			<when expression='#["UNAUTHORIZED" == vars.errorType]'>
+				<set-variable value="#[401]" doc:name="httpStatus" doc:id="dd3607c6-3c8c-4236-b1fb-980dae3655ea" variableName="httpStatus" />
+				<set-variable value="#['You should be logged in to perform that action.']" doc:name="errorTitle" doc:id="487a61ee-fbbd-44ff-bd6b-2d0ea36b750a" variableName="errorTitle" />
+				<raise-error doc:name="TREASURY:UNAUTHORIZED" doc:id="e4f2886f-5ab2-4d02-a7f6-ea3db9bad809" type="TREASURY:UNAUTHORIZED" description="#[vars.errorDescription]" />
+			</when>
+			<when expression='#["FORBIDDEN" == vars.errorType]'>
+				<set-variable value="#[403]" doc:name="httpStatus" doc:id="693ef193-3d76-4f0e-8550-ca71ae60be51" variableName="httpStatus" />
+				<set-variable value="#['You are not allowed to perform that action.']" doc:name="errorTitle" doc:id="e282e135-f585-4c29-a79f-f4122fb7e948" variableName="errorTitle" />
+				<raise-error doc:name="TREASURY:FORBIDDEN" doc:id="ea0d227d-195f-421b-80f7-bdf6d32d4161" type="TREASURY:FORBIDDEN" description="#[vars.errorDescription]" />
+			</when>
+			<otherwise >
+				<logger level="DEBUG" doc:name="Log payload (DEBUG)" doc:id="b6f0fff1-8fff-404f-bf29-50678b896cae" message="[#[flow.name]] - [#[correlationId]] - Received payload: #[payload]" category="TREASURY" />
+			</otherwise>
+		</choice>
+	</sub-flow>	
+	<sub-flow name="treasury-generic-request" doc:id="f4b44948-b149-48b4-a9cb-638065f3c7d4" >
+		<logger level="DEBUG" doc:name="Start" doc:id="3767f250-ad4c-4366-9a8e-51423f4cbd21" message="[#[flow.name]] - [#[correlationId]] - START" category="TREASURY" />
+		<until-successful maxRetries="${treasury.retry.maxRetries}" doc:name="Until Successful" doc:id="c9889967-17e1-4765-863a-3f78d106306c" millisBetweenRetries="${treasury.retry.msBetweenRetries}" >
+			<try doc:name="Try" doc:id="10573649-7b2e-4d53-ae33-254d90ba91ad" >
+				<http:request method="#[vars.request.method]" doc:name="Generic" doc:id="3c8ce565-44ec-48b2-b0e6-57143708218e" config-ref="Treasury_HTTP_Request_configuration" path="#[vars.request.path]" >
+					<http:body ><![CDATA[#[vars.request.body default {}]]]></http:body>
+					<http:headers ><![CDATA[#[vars.request.headers default {}]]]></http:headers>
+					<http:uri-params ><![CDATA[#[vars.request.uriParams default {}]]]></http:uri-params>
+					<http:query-params ><![CDATA[#[vars.request.queryParams default {}]]]></http:query-params>
+				
+</http:request>
+				<error-handler >
+					<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="6e5209bb-8841-4af8-bfab-3c21f1f8503f" when="#[['BAD_REQUEST', 'NOT_FOUND', 'FORBIDDEN', 'UNAUTHORIZED'] contains error.errorType.identifier]" >
+						<logger level="ERROR" doc:name="Log received error (ERROR)" doc:id="92bbe029-af53-4ca9-b004-d9e8529f603b" message='[#[flow.name]] - [#[correlationId]] - #[error.errorType.namespace ++ ":" ++ error.errorType.identifier]: #[error.errorMessage.payload]' category="TREASURY" />
+						<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;error.description]" doc:name="errorDescription" doc:id="6a13d8ef-ac7a-4681-ac8d-e4a095ee30f9" variableName="errorDescription"/>
+
+						<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;error.errorMessage.payload.errors[0].detail]" doc:name="detailedDescription" doc:id="66d403ec-ab43-413a-9e9a-bee3a622f7a7" variableName="detailedDescription"/>
+
+						<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;error.errorType.identifier]" doc:name="errorType" doc:id="77993d78-564d-42e3-b898-9aaf4e9ae737" variableName="errorType"/>
+					</on-error-continue>
+					<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="506532e5-3692-4a66-9e42-8417134de5f7" type="ANY" >
+						<logger level="ERROR" doc:name="Log received error (ERROR)" doc:id="97ba3595-26a0-41c3-b459-107cd8779a1f" message="[#[flow.name]] - [#[correlationId]] - Received error: #[error.errorMessage.payload]" category="TREASURY" />
+					</on-error-propagate>
+				</error-handler>
+			</try>
+		</until-successful>
+		<flow-ref doc:name="util-treasury.manage-error" doc:id="6509401f-84d6-4250-b3c6-58d339df671c" name="util-treasury.manage-error" />
+		<logger level="DEBUG" doc:name="End" doc:id="81e0199a-1cbb-4395-adc5-9948b7cf28bb" message="[#[flow.name]] - [#[correlationId]] - END" category="TREASURY" />
+	</sub-flow>
+</mule>

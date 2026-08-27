@@ -1,0 +1,16 @@
+{
+  "data": {
+    "objects": [
+      {
+        "codes": { "alpha_2": "ES" },
+        "names": { "common": "Spain" },
+        "region": "Europe"
+      },
+      {
+        "codes": { "alpha_2": "GB" },
+        "names": { "common": "United Kingdom" },
+        "region": "Europe"
+      }
+    ]
+  }
+}

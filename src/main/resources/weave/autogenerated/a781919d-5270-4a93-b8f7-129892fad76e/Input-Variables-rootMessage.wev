@@ -1,0 +1,12 @@
+%dw 2.0
+
+type auto_a781919d_5270_4a93_b8f7_129892fad76e_Input_Variables_rootMessage = {|
+  payload: Binary, 
+  attributes: org_mule_extension_file_common_api_FileAttributes {"typeAlias": "FileAttributes",
+  "typeId": "org.mule.extension.file.common.api.FileAttributes"}
+|} {"typeId": "org.mule.runtime.api.message.Message"}
+type org_mule_extension_file_common_api_FileAttributes = {|  |} {"typeAlias": "FileAttributes",
+"typeId": "org.mule.extension.file.common.api.FileAttributes"}
+
+
+

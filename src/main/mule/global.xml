@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+	<configuration-properties doc:name="Configuration properties" doc:id="88b7f1ae-c0f5-4177-8e21-181730179bb5" file="properties/properties-${mule.env}.yaml" />
+	<configuration-properties doc:name="Configuration properties" doc:id="4bfb4d26-8aad-460b-b529-f18530b67d76" file="properties/common.yaml" />
+	<global-property doc:name="Global Property" doc:id="edeccef5-be1e-49e6-b5b9-56842d672c80" name="mule.env" value="local" />
+	<global-property doc:name="Global Property" doc:id="d48adce6-ac64-4d17-aa27-e27307e7ddc5" name="encryption.key" value="secret1234567890" />
+	<http:request-config name="RestCountries_HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="1571888b-c691-463d-8907-b4d429e95b8e" basePath="${restCountries.basePath}" responseTimeout="${restCountries.responseTimeout}">
+		<http:request-connection protocol="${restCountries.protocol}" host="${restCountries.host}" port="${restCountries.port}" connectionIdleTimeout="3000" />
+		<http:default-headers >
+			<http:default-header key="Authorization" value="${secure::restCountries.apiToken}" />
+		</http:default-headers>
+	</http:request-config>
+	<http:request-config name="Frankfurter_HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="d7236dd9-9db2-45b4-a716-3030710dccfd" basePath="${frankfurter.basePath}" responseTimeout="${frankfurter.responseTimeout}">
+		<http:request-connection protocol="${frankfurter.protocol}" host="${frankfurter.host}" port="${frankfurter.port}" connectionIdleTimeout="3000" />
+	</http:request-config>
+	<http:request-config name="Treasury_HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="6f7d7019-74c8-4306-82fb-d87d2d06ca4b" basePath="${treasury.basePath}" responseTimeout="${treasury.responseTimeout}">
+		<http:request-connection protocol="${treasury.protocol}" host="${treasury.host}" port="${treasury.port}" connectionIdleTimeout="3000" />
+	</http:request-config>
+	<secure-properties:config 
+		name="Secure_Properties_Config" 
+		doc:name="Secure Properties Config" 
+		doc:id="81019044-c236-403a-9e5e-ed30bc19c0e4" 		
+		file="properties/properties-${mule.env}.yaml"
+		key="${encryption.key}" />
+	<os:config name="Reference_Cache_ObjectStore_Config" doc:name="Reference Cache Object Store" />
+	<ee:object-store-caching-strategy name="Country_Response_Caching_Strategy"
+		keyGenerationExpression='#["country:v5:" ++ upper(vars.record.country_code default "")]'
+		synchronized="true">
+		<os:private-object-store alias="CountryResponseCache"
+			persistent="false"
+			maxEntries="${cache.countries.maxEntries}"
+			entryTtl="${cache.countries.entryTtlMinutes}"
+			entryTtlUnit="MINUTES"
+			expirationInterval="${cache.expirationIntervalMinutes}"
+			expirationIntervalUnit="MINUTES"
+			config-ref="Reference_Cache_ObjectStore_Config" />
+	</ee:object-store-caching-strategy>
+	<ee:object-store-caching-strategy name="Currency_Response_Caching_Strategy"
+		keyGenerationExpression='#["currency:" ++ upper(vars.record.currency default "") ++ ":" ++ upper(Mule::p("referenceCurrency"))]'
+		synchronized="true">
+		<os:private-object-store alias="CurrencyResponseCache"
+			persistent="false"
+			maxEntries="${cache.currencies.maxEntries}"
+			entryTtl="${cache.currencies.entryTtlMinutes}"
+			entryTtlUnit="MINUTES"
+			expirationInterval="${cache.expirationIntervalMinutes}"
+			expirationIntervalUnit="MINUTES"
+			config-ref="Reference_Cache_ObjectStore_Config" />
+	</ee:object-store-caching-strategy>
+</mule>

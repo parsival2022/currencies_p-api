@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	<sub-flow name="util-frankfurter.manage-error" doc:id="4db434da-89a4-461e-8718-50dde565bdc6" >
+		<choice doc:name="Error type is set?" doc:id="40594d28-b4d5-4827-bca1-f310a28dc15b" >
+			<when expression='#["BAD_REQUEST" == vars.errorType]' >
+				<set-variable value="#[400]" doc:name="httpStatus" doc:id="f8af033d-7a2b-4cb3-af5d-47e6968bd0c9" variableName="httpStatus"/>
+				<set-variable value="#[vars.errorDescription]" doc:name="errorTitle" doc:id="f5e0625d-8c05-45f6-840c-5990bbd35d5b" variableName="errorTitle" />
+				<raise-error doc:name="FRANKFURTER:BAD_REQUEST" doc:id="abbc38b7-89e4-4074-952d-5b8c240a1526" type="FRANKFURTER:BAD_REQUEST" description="#[vars.errorDescription]" />
+			</when>
+			<when expression='#["NOT_FOUND" == vars.errorType]' >
+				<set-variable value="#[404]" doc:name="httpStatus" doc:id="6b90a535-d7a1-46fe-a2db-2cf836057442" variableName="httpStatus" />
+				<set-variable value="#['Resource not found']" doc:name="errorTitle" doc:id="e052f226-e99e-48f2-8d1d-9b0e76dab175" variableName="errorTitle" />
+				<raise-error doc:name="FRANKFURTER:NOT_FOUND" doc:id="ac1ecc23-9290-45eb-bf75-1f4f37121cc0" type="FRANKFURTER:NOT_FOUND" description="#[vars.errorDescription]" />
+			</when>
+			<when expression='#["UNAUTHORIZED" == vars.errorType]'>
+				<set-variable value="#[401]" doc:name="httpStatus" doc:id="dbec2ac9-3843-4ed1-bafd-8359beed6092" variableName="httpStatus" />
+				<set-variable value="#['You should be logged in to perform that action.']" doc:name="errorTitle" doc:id="674c7362-08b7-44f1-8e4d-f437c19bad7a" variableName="errorTitle" />
+				<raise-error doc:name="FRANKFURTER:UNAUTHORIZED" doc:id="8526a518-e461-428f-b68c-79f30d7bd586" type="FRANKFURTER:UNAUTHORIZED" description="#[vars.errorDescription]" />
+			</when>
+			<when expression='#["FORBIDDEN" == vars.errorType]'>
+				<set-variable value="#[403]" doc:name="httpStatus" doc:id="2f9bee8c-549b-4f9c-9f06-3389c2ce70c7" variableName="httpStatus" />
+				<set-variable value="#['You are not allowed to perform that action.']" doc:name="errorTitle" doc:id="2d8ce470-056e-4cd9-87fd-15ff0f8ed2e8" variableName="errorTitle" />
+				<raise-error doc:name="FRANKFURTER:FORBIDDEN" doc:id="955ff837-1624-4933-b2ad-4fdce9a0b96e" type="FRANKFURTER:FORBIDDEN" description="#[vars.errorDescription]" />
+			</when>
+			<otherwise >
+				<logger level="DEBUG" doc:name="Log payload (DEBUG)" doc:id="d8e2aaa5-b857-4cff-8df1-85ae3c65c3cb" message="[#[flow.name]] - [#[correlationId]] - Received payload: #[payload]" category="FRANKFURTER" />
+			</otherwise>
+		</choice>
+	</sub-flow>	
+	<sub-flow name="frankfurter-generic-request" doc:id="19df7251-4249-4e66-bf3b-cfccc9a47817" >
+		<logger level="DEBUG" doc:name="Start" doc:id="182066da-df53-41eb-9c8d-4509900f062f" message="[#[flow.name]] - [#[correlationId]] - START" category="FRANKFURTER" />
+		<until-successful maxRetries="${frankfurter.retry.maxRetries}" doc:name="Until Successful" doc:id="b2519f23-68e6-4837-9afb-dfdc1c825311" millisBetweenRetries="${frankfurter.retry.msBetweenRetries}" >
+			<try doc:name="Try" doc:id="ab4c168b-d100-43a4-8ef1-c8dd83ca5064" >
+				<http:request method="#[vars.request.method]" doc:name="Generic" doc:id="afbec950-6de8-446d-9aad-cd1da849ac80" config-ref="Frankfurter_HTTP_Request_configuration" path="#[vars.request.path]" >
+					<http:body ><![CDATA[#[vars.request.body default {}]]]></http:body>
+					<http:headers ><![CDATA[#[vars.request.headers default {}]]]></http:headers>
+					<http:uri-params ><![CDATA[#[vars.request.uriParams default {}]]]></http:uri-params>
+					<http:query-params ><![CDATA[#[vars.request.queryParams default {}]]]></http:query-params>
+				
+</http:request>
+				<error-handler >
+					<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="86b9a6f9-1ee6-452c-8f1a-32adfa21575e" when="#[['BAD_REQUEST', 'NOT_FOUND', 'FORBIDDEN', 'UNAUTHORIZED'] contains error.errorType.identifier]" >
+						<logger level="ERROR" doc:name="Log received error (ERROR)" doc:id="0fadd8c6-7058-44b3-b5a6-1fdf6ca0624c" message='[#[flow.name]] - [#[correlationId]] - #[error.errorType.namespace ++ ":" ++ error.errorType.identifier]: #[error.errorMessage.payload]' category="FRANKFURTER" />
+						<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;error.description]" doc:name="errorDescription" doc:id="ce70162a-8d72-4ca3-b978-ed7fcb08d042" variableName="errorDescription"/>
+
+						<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;error.errorMessage.payload.errors[0].detail]" doc:name="detailedDescription" doc:id="0c284f3f-a209-449c-9fa4-dbf2ddbf4029" variableName="detailedDescription"/>
+
+						<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;error.errorType.identifier]" doc:name="errorType" doc:id="23244ed9-c453-4ccb-a458-24ca7373d22f" variableName="errorType"/>
+					</on-error-continue>
+					<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="66401d1d-780f-40c5-99e4-500163f676cd" type="ANY" >
+						<logger level="ERROR" doc:name="Log received error (ERROR)" doc:id="c6aefb4e-b1ed-488f-a378-d6a394c21f6e" message="[#[flow.name]] - [#[correlationId]] - Received error: #[error.errorMessage.payload]" category="FRANKFURTER" />
+					</on-error-propagate>
+				</error-handler>
+			</try>
+		</until-successful>
+		<flow-ref doc:name="util-frankfurter.manage-error" doc:id="59b293b4-6581-4240-9117-1aafcae18f35" name="util-frankfurter.manage-error" />
+		<logger level="DEBUG" doc:name="End" doc:id="d0168bfe-a589-4603-ab01-5122afff0e38" message="[#[flow.name]] - [#[correlationId]] - END" category="FRANKFURTER" />
+	</sub-flow>
+</mule>

@@ -1,0 +1,2 @@
+sale_id,sale_date,country_code,currency,amount_local,customer_email
+T-ERR-001,2026-02-01,PL,PLN,100.00,error@example.com

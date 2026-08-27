@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	<error-handler name="error-handling.global-error-handler" doc:id="6d86c751-c52a-46dd-b5c0-9ad1d481aaf0">
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="Propagate scheduled run failure" type="ANY">
+			<logger level="ERROR" category="SALES_DIGEST" doc:name="Log scheduled run failure"
+				message='#["CORRELATION ID [" ++ correlationId ++ "] - Sales digest run failed. Error type [" ++ error.errorType.namespace ++ ":" ++ error.errorType.identifier ++ "]. Record ID [" ++ ((((vars.record default {}).sale_id default "n/a") as String)) ++ "]. Upstream path [" ++ ((((vars.request default {}).path default "n/a") as String)) ++ "]. Description [" ++ ((error.detailedDescription default error.description default "No description") as String) ++ "]."]' />
+		</on-error-propagate>
+	</error-handler>
+</mule>

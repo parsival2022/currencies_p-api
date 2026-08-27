@@ -1,0 +1,53 @@
+# API Configuration
+api:
+  application:
+    name: "CURRENCIES_P-API"
+  v1:
+    path: "/${api.application.name}/api/v1"
+    console.initialState: "started"
+    
+https:
+  host: "0.0.0.0" # must be 0.0.0.0
+  port: "8081" # use the dedicated API port
+  
+referenceCurrency: "EUR"
+
+cache:
+  expirationIntervalMinutes: "5"
+  countries:
+    entryTtlMinutes: "60"
+    maxEntries: "300"
+  currencies:
+    entryTtlMinutes: "15"
+    maxEntries: "100"
+
+restCountries:
+  protocol: "HTTPS"
+  host: "api.restcountries.com"
+  port: ""
+  basePath: ""
+  responseTimeout: "50000"
+  retry: 
+    maxRetries: "5"
+    msBetweenRetries: "30000"
+    
+frankfurter:
+  protocol: "HTTPS"
+  host: "api.frankfurter.dev"
+  port: ""
+  basePath: "/v2"
+  responseTimeout: "50000"
+  retry: 
+    maxRetries: "5"
+    msBetweenRetries: "30000"
+    
+treasury:
+  protocol: "HTTPS"
+  host: "httpbin.org"
+  port: ""
+  basePath: ""
+  responseTimeout: "50000"
+  retry: 
+    maxRetries: "5"
+    msBetweenRetries: "30000"
+

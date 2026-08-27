@@ -1,0 +1,7 @@
+%dw 2.0
+
+type auto_6996caef_0c3d_4674_89c8_8862266d16ec_Input_Variables_request = {|
+  method: String, 
+  queryParams: {| q: Null |}
+|}
+

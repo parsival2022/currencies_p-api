@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	<sub-flow name="util-rest-countries.manage-error" doc:id="ba6c423a-43ac-44ac-b599-e991477915df" >
+		<choice doc:name="Error type is set?" doc:id="1e6d7e1e-6b9e-42f2-944a-f5968ddf680c" >
+			<when expression='#["BAD_REQUEST" == vars.errorType]' >
+				<set-variable value="#[400]" doc:name="httpStatus" doc:id="a0b827c2-048f-4fa8-add7-b8fb026017b4" variableName="httpStatus"/>
+				<set-variable value="#[vars.errorDescription]" doc:name="errorTitle" doc:id="270ada71-1f72-4b89-8af6-fdba55a83abe" variableName="errorTitle" />
+				<raise-error doc:name="REST_COUNTRIES:BAD_REQUEST" doc:id="483faa82-cb3e-470a-bec6-1818faec88db" type="REST_COUNTRIES:BAD_REQUEST" description="#[vars.errorDescription]" />
+			</when>
+			<when expression='#["NOT_FOUND" == vars.errorType]' >
+				<set-variable value="#[404]" doc:name="httpStatus" doc:id="f43b5dd7-a02a-4383-9263-527df1c07450" variableName="httpStatus" />
+				<set-variable value="#['Resource not found']" doc:name="errorTitle" doc:id="57af5a5a-cc6f-4f41-943a-4167cbc036bc" variableName="errorTitle" />
+				<raise-error doc:name="REST_COUNTRIES:NOT_FOUND" doc:id="1856cdca-80df-4f93-bd9f-3c8a8a6de0d6" type="REST_COUNTRIES:NOT_FOUND" description="#[vars.errorDescription]" />
+			</when>
+			<when expression='#["UNAUTHORIZED" == vars.errorType]'>
+				<set-variable value="#[401]" doc:name="httpStatus" doc:id="d68d05c8-3261-4f9f-a2b6-7c11c5e2025e" variableName="httpStatus" />
+				<set-variable value="#['You should be logged in to perform that action.']" doc:name="errorTitle" doc:id="e1f1529a-90a4-4aea-9453-ce5cf62e7d00" variableName="errorTitle" />
+				<raise-error doc:name="REST_COUNTRIES:UNAUTHORIZED" doc:id="2b9a170e-a705-4d41-a8f6-bb68d2dc3e80" type="REST_COUNTRIES:UNAUTHORIZED" description="#[vars.errorDescription]" />
+			</when>
+			<when expression='#["FORBIDDEN" == vars.errorType]'>
+				<set-variable value="#[403]" doc:name="httpStatus" doc:id="7e6f8838-5d3b-436a-b43a-a9cbebeafe49" variableName="httpStatus" />
+				<set-variable value="#['You are not allowed to perform that action.']" doc:name="errorTitle" doc:id="7d481f99-cd23-43bb-a018-f9b050bf7892" variableName="errorTitle" />
+				<raise-error doc:name="REST_COUNTRIES:FORBIDDEN" doc:id="36919ef2-34a2-48bd-bddc-4bee32ee1c88" type="REST_COUNTRIES:FORBIDDEN" description="#[vars.errorDescription]" />
+			</when>
+			<otherwise >
+				<logger level="DEBUG" doc:name="Log payload (DEBUG)" doc:id="d9b3b1b3-970a-43ce-a2db-babfb68076b0" message="[#[flow.name]] - [#[correlationId]] - Received payload: #[payload]" category="REST_COUNTRIES" />
+			</otherwise>
+		</choice>
+	</sub-flow>	
+	<sub-flow name="rest-countries-generic-request" doc:id="6996caef-0c3d-4674-89c8-8862266d16ec" >
+		<logger level="DEBUG" doc:name="Start" doc:id="13f6c565-5576-481c-ab50-fe5a09f6e832" message="[#[flow.name]] - [#[correlationId]] - START" category="REST_COUNTRIES" />
+		<until-successful maxRetries="${restCountries.retry.maxRetries}" doc:name="Until Successful" doc:id="dddaeac9-9039-48c8-82d4-d29b8c532f81" millisBetweenRetries="${restCountries.retry.msBetweenRetries}" >
+			<try doc:name="Try" doc:id="470a5eb3-58fe-462c-a02f-4f264acba087" >
+				<http:request method="#[vars.request.method]" doc:name="Generic" doc:id="1409b5c0-87ee-4e46-8c58-b1cfd6c3134a" config-ref="RestCountries_HTTP_Request_configuration" path="#[vars.request.path]" >
+					<http:body ><![CDATA[#[vars.request.body default {}]]]></http:body>
+					<http:headers ><![CDATA[#[vars.request.headers default {}]]]></http:headers>
+					<http:uri-params ><![CDATA[#[vars.request.uriParams default {}]]]></http:uri-params>
+					<http:query-params ><![CDATA[#[vars.request.queryParams default {}]]]></http:query-params>
+				
+</http:request>
+				<error-handler >
+					<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="1e830b27-d8f4-447e-af78-88fa88c2938e" when="#[['BAD_REQUEST', 'NOT_FOUND', 'FORBIDDEN', 'UNAUTHORIZED'] contains error.errorType.identifier]" >
+						<logger level="ERROR" doc:name="Log received error (ERROR)" doc:id="36638a52-410d-4ff4-9ca2-edac78000fbd" message='[#[flow.name]] - [#[correlationId]] - #[error.errorType.namespace ++ ":" ++ error.errorType.identifier]: #[error.errorMessage.payload]' category="REST_COUNTRIES" />
+						<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;error.description]" doc:name="errorDescription" doc:id="114d12f1-5813-44f7-aaff-6798b84b6a99" variableName="errorDescription"/>
+
+						<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;error.errorMessage.payload.errors[0].detail]" doc:name="detailedDescription" doc:id="495de20b-2130-4781-ab2f-e7f99420ce86" variableName="detailedDescription"/>
+
+						<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;error.errorType.identifier]" doc:name="errorType" doc:id="2624104a-5dc4-44c7-9f60-710150879909" variableName="errorType"/>
+					</on-error-continue>
+					<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="df93404e-4f4b-4ea4-9fcf-0d1e02592be2" type="ANY" >
+						<logger level="ERROR" doc:name="Log received error (ERROR)" doc:id="26c52230-849b-4629-aea2-1706382f07b7" message="[#[flow.name]] - [#[correlationId]] - Received error: #[error.errorMessage.payload]" category="REST_COUNTRIES" />
+					</on-error-propagate>
+				</error-handler>
+			</try>
+		</until-successful>
+		<flow-ref doc:name="util-rest-countries.manage-error" doc:id="410271e3-099b-48af-8a5d-6f358c91df8a" name="util-rest-countries.manage-error" />
+		<logger level="DEBUG" doc:name="End" doc:id="40155ae4-ad81-423f-b615-467c79cc2d20" message="[#[flow.name]] - [#[correlationId]] - END" category="REST_COUNTRIES" />
+	</sub-flow>
+</mule>

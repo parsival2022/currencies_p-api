@@ -1,0 +1,4 @@
+sale_id,sale_date,country_code,currency,amount_local,customer_email
+T-001,2026-01-01,ES,EUR,100.00,ana@example.com
+T-002,2026-01-02,GB,GBP,50.00,ben@example.com
+T-003,2026-01-03,GB,GBP,25.00,cam@example.com
